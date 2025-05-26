@@ -5,6 +5,8 @@ from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 
 ### Run this once to download the necessary data
+
+
 '''
 nltk.download('punkt', download_dir='/Users/harrilan/nltk_data')
 print("Download complete! 1/4")
