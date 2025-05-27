@@ -173,4 +173,6 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-chroma_storage/
+chroma_db/
+all_chunks.json
+all_embeddings.npy
