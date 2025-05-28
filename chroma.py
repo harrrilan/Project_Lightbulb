@@ -16,14 +16,18 @@ ids = [str(i) for i in range(len(embd))]
 
 client = chromadb.PersistentClient(path="chroma_db")
 #client.delete_collection(name="3_chuncks_collection")
-collection = client.get_or_create_collection(name="3_chuncks_collection")
+collection = client.get_or_create_collection(name="1_chunck_collection")
 
-# Add embeddings to the collection
-collection.add(
-    embeddings=embd,
-    ids=ids,
-    documents=all_chunks
+max_batch_size = 5461  # or use chromadb.config.settings.DEFAULT_MAX_BATCH_SIZE if available
 
-)
+for i in range(0, len(embd), max_batch_size):
+    batch_embd = embd[i:i+max_batch_size]
+    batch_ids = ids[i:i+max_batch_size]
+    batch_docs = all_chunks[i:i+max_batch_size]
+    collection.add(
+        embeddings=batch_embd,
+        ids=batch_ids,
+        documents=batch_docs
+    )
 
 print(f"Added {len(embd)} embeddings to ChromaDB collection.")

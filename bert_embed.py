@@ -19,7 +19,7 @@ tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 model = BertModel.from_pretrained("bert-base-uncased")
 
 # Step 4: Embed in chunks
-chunk_size = 3  # <-- You can change this value as needed
+chunk_size = 1  # <-- You can change this value as needed
 print(f"[DEBUG] Embedding sentences in chunks of {chunk_size}...")
 
 all_embeddings = []
