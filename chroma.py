@@ -11,12 +11,13 @@ print("First embedding vector:", embd[0])
 with open('all_chunks.json', 'r') as f:
     all_chunks = json.load(f)
 
-# Create unique string IDs for each embedding
-ids = [str(i) for i in range(len(embd))]
+# Load IDs generated during embedding
+with open('all_ids.json', 'r') as f:
+    ids = json.load(f)
 
 client = chromadb.PersistentClient(path="chroma_db")
-#client.delete_collection(name="3_chuncks_collection")
-collection = client.get_or_create_collection(name="1_chunck_collection")
+#client.delete_collection(name="sentence_collection")
+collection = client.get_or_create_collection(name="openai_embed_collection")
 
 max_batch_size = 5461  # or use chromadb.config.settings.DEFAULT_MAX_BATCH_SIZE if available
 
@@ -24,6 +25,8 @@ for i in range(0, len(embd), max_batch_size):
     batch_embd = embd[i:i+max_batch_size]
     batch_ids = ids[i:i+max_batch_size]
     batch_docs = all_chunks[i:i+max_batch_size]
+    print(f"DEBUG: Shape of batch_embd: {np.array(batch_embd).shape}")
+    print(f"DEBUG: First embedding (top 5): {batch_embd[0][:5]}")
     collection.add(
         embeddings=batch_embd,
         ids=batch_ids,

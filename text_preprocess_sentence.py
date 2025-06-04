@@ -17,22 +17,25 @@ print("Download complete! 3/4")
 nltk.download('wordnet', download_dir='/Users/harrilan/nltk_data')
 print("Download complete! 4/4")
 '''
+CLEAN_RE = re.compile(r"[^\w\s\.,!?'\-’$%]")   # keep ’ (curly) & -
 
-def preprocess_sentences(file_path):
-    with open(file_path, 'r', encoding='utf-8') as file:
+def preprocess_sentences(file_path: str):
+    with open(file_path, "r", encoding="utf-8") as file:
         text = file.read()
 
     sentences = sent_tokenize(text)
-    
+
     token_by_sentences = []
     for sentence in sentences:
+        # lower-case (fine for bert-uncased; remove if you ever switch to a cased model)
         sentence = sentence.lower()
-        sentence = re.sub(r'[^a-zA-Z\s\.,!?]', '', sentence)
-        sentence = ' '.join(sentence.split())
-
-        if len(sentence) > 0:
+        # use our keep-list regex instead of the old strip-everything pattern
+        sentence = CLEAN_RE.sub("", sentence)
+        # collapse double spaces etc.
+        sentence = " ".join(sentence.split())
+        if len(sentence) > 0:           # keep everything, even micro-sentences
             token_by_sentences.append(sentence)
-    
+
     return token_by_sentences
 
 file_path = "text_rye.txt"
