@@ -1,7 +1,7 @@
 import openai
 import os
 from dotenv import load_dotenv
-from retrieval import retrieve
+from rag_app.retrieval import retrieve
 
 load_dotenv()  # Loads .env variables
 

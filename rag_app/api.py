@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from llm_call import answer
+from rag_app.llm_call import answer
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()

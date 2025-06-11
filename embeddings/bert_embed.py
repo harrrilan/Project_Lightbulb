@@ -1,10 +1,10 @@
 from transformers import AutoTokenizer, AutoModel
-from text_preprocess_sentence import preprocess_sentences
+from text_preprocessing.text_preprocess_sentence import preprocess_sentences
 import numpy as np
 import json
 import statistics
 import torch
-from visualization import plot_embeddings_3d_tsne
+from evaluations.visualization import plot_embeddings_3d_tsne
 
 TARGET_TOKENS = 25      # aim per chunk
 OVERLAP_TOKENS = 10      # keep this many tokens from the previous chunk

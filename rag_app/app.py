@@ -1,5 +1,5 @@
 import gradio as gr
-from llm_call import answer
+from rag_app.llm_call import answer
 
 def chat_fn(message, history):
     # Optionally, you can use history for multi-turn context
