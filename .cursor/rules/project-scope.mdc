@@ -1,0 +1,21 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+<app idea>
+This is a app where user will Inquire LLMs about characters of a book. 
+The goal is to allow user to understand character's psyche in depth like psycho-analysis.
+</app idea>
+
+<structure>
+Currently it's very experimental so sorry in advance for the mess.
+/backend, is intended to create more organized agent structure using LangGraph.
+</structure>
+
+<goal of the agent>
+START ─→ knowledge_check
+           ├─ need_retrieval == True ─→ retrieve_docs ─→ compose_answer
+           └─ need_retrieval == False ────────────────→ compose_answer
+compose_answer ─→ update_memory ─→ END
+</goal of the agent>
