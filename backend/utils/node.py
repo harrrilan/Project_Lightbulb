@@ -1,11 +1,15 @@
 # node.py
 import os
-import chromadb
 from dotenv import load_dotenv
 load_dotenv()
 from typing import Dict, List, Any
 import chromadb
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage  # For message types
+from langchain_core.messages import (
+    HumanMessage, 
+    AIMessage, 
+    SystemMessage,
+    BaseMessage
+    )
 import json
 from pathlib import Path
 from .state import AgentState  # Import AgentState from adjacent state.py
@@ -18,6 +22,7 @@ openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 def check_permanent_knowledge(state: AgentState) -> AgentState:
     """
     Check if existing knowledge in JSON is sufficient to answer the query.
+    This is a placeholder implementation, need vectordb or llm to determine if current knowledge is sufficient
     Sets state["need_retrieval"] based on analysis.
     """
     print("\n=== Executing: check_permanent_knowledge ===")
@@ -37,7 +42,8 @@ def check_permanent_knowledge(state: AgentState) -> AgentState:
                 state["permanent_knowledge"] = json.load(f)
         
         # TODO: Implement logic to determine if current knowledge is sufficient
-        # This is a placeholder implementation
+        
+        # This is a placeholder implementation, need vectordb or llm to determine if current knowledge is sufficient
         current_query = state.get("current_query", "")
         relevant_knowledge_exists = any(
             current_query.lower() in str(value).lower()
@@ -65,7 +71,7 @@ def retrieve_from_chroma(state: AgentState) -> AgentState:
     
     try:
         # ✅ Use the same path as your working retrieval.py
-        client = chromadb.PersistentClient(path="chroma_db")  # Fixed path
+        client = chromadb.PersistentClient(path="chroma_db")
         collection = client.get_collection("metadata_collection")
         
         current_query = state.get("current_query", "")
@@ -114,18 +120,18 @@ def generate_answer(state: AgentState) -> AgentState:
         Use evidence from the provided context and conversation history.
         """
         
-        # Prepare messages for LLM
+        # Prepare messages for LLM (system message)
         messages = [SystemMessage(content=system_prompt)]
         
-        # Add chat history (already LangChain messages)
+        # Add chat history (system message)
         messages.extend(chat_history)
         
-        # Add current context as system message if available
+        # Add current context as system message if available (system message)
         if context or knowledge:
             context_msg = f"Context: {context}\nKnowledge: {knowledge}"
             messages.append(SystemMessage(content=context_msg))
         
-        # Add current query
+        # Add current query (User message)
         current_query = state.get("current_query", "")
         if current_query:
             messages.append(HumanMessage(content=current_query))
