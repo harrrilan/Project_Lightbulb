@@ -9,14 +9,22 @@ from langchain_core.messages import (
     AIMessage, 
     SystemMessage,
     BaseMessage
-    )
+)
+from langchain_openai import ChatOpenAI  # ✅ Use LangChain's OpenAI wrapper
 import json
 from pathlib import Path
 from .state import AgentState  # Import AgentState from adjacent state.py
 import openai
 from datetime import datetime
 
-# Add this at the top after other imports
+# ✅ Initialize the LLM wrapper (handles role conversion & batching)
+llm = ChatOpenAI(
+    model="gpt-4o-2024-08-06",
+    api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=0.3
+)
+
+# Keep the OpenAI client for embeddings (LangChain doesn't handle embeddings as cleanly)
 openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def check_permanent_knowledge(state: AgentState) -> AgentState:
@@ -71,7 +79,8 @@ def retrieve_from_chroma(state: AgentState) -> AgentState:
     
     try:
         # ✅ Use the same path as your working retrieval.py
-        client = chromadb.PersistentClient(path="chroma_db")
+        project_root = Path(__file__).resolve().parent.parent.parent
+        client = chromadb.PersistentClient(path=str(project_root / "chroma_db"))
         collection = client.get_collection("metadata_collection")
         
         current_query = state.get("current_query", "")
@@ -98,85 +107,68 @@ def retrieve_from_chroma(state: AgentState) -> AgentState:
         state["retrieved_docs"] = []
         return state
 
-def generate_answer(state: AgentState) -> AgentState:
+def generate_answer(state: AgentState) -> Dict[str, List[BaseMessage]]:
     """
-    Generate response using LLM with context from permanent knowledge and/or retrieved docs.
+    ✅ LangGraph node: build a prompt from state, call the LLM,
+    and return ONLY the new AIMessage so add_messages can append it.
     """
     print("\n=== Executing: generate_answer ===")
     
     try:
-        # Get existing messages (now proper LangChain messages)
+        # ✅ Pull pieces out of shared state
         chat_history = state.get("messages", [])
         knowledge = state.get("permanent_knowledge", {})
         retrieved_docs = state.get("retrieved_docs", [])
-        
-        # Convert retrieved docs to context string
-        context = "\n".join(retrieved_docs) if retrieved_docs else ""
-        
-        # Build system message for character analysis
-        system_prompt = """
-        You are a literary analyst focused on psychological character analysis.
-        Analyze characters' mindset, emotional state, behavior patterns, and internal conflicts.
-        Use evidence from the provided context and conversation history.
-        """
-        
-        # Prepare messages for LLM (system message)
-        messages = [SystemMessage(content=system_prompt)]
-        
-        # Add chat history (system message)
-        messages.extend(chat_history)
-        
-        # Add current context as system message if available (system message)
-        if context or knowledge:
-            context_msg = f"Context: {context}\nKnowledge: {knowledge}"
-            messages.append(SystemMessage(content=context_msg))
-        
-        # Add current query (User message)
         current_query = state.get("current_query", "")
-        if current_query:
-            messages.append(HumanMessage(content=current_query))
-
-        # ✅ Fix the message type mapping for OpenAI
-        def get_openai_role(msg):
-            if isinstance(msg, HumanMessage):
-                return "user"
-            elif isinstance(msg, AIMessage):
-                return "assistant" 
-            elif isinstance(msg, SystemMessage):
-                return "system"
-            else:
-                return "system"  # fallback
-
-        openai_messages = [
-            {"role": get_openai_role(msg), "content": msg.content}
-            for msg in messages
+        
+        print(f"[DEBUG] Chat history length: {len(chat_history)}")
+        print(f"[DEBUG] Retrieved docs count: {len(retrieved_docs)}")
+        print(f"[DEBUG] Current query: {current_query[:100]}...")
+        print(f"[DEBUG] Top 5 knowledge keys: {list(knowledge.keys())[:5]}")
+        
+        # ✅ Build the system persona + history + context + query
+        prompt_msgs: List[BaseMessage] = [
+            SystemMessage(
+                content=(
+                    "You are a literary analyst focused on psychological character analysis.\n"
+                    "Analyze characters' mindset, emotional state, behavior patterns, and internal conflicts.\n"
+                    "Use evidence from the provided context and conversation history."
+                )
+            )
         ]
         
-        print(f"[DEBUG] OpenAI messages: {[(msg['role'], msg['content'][:50]) for msg in openai_messages]}")
+        # Add chat history (this already contains the conversation flow)
+        prompt_msgs.extend(chat_history)
         
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-2024-08-06",
-            messages=openai_messages
-        )
-        answer = response.choices[0].message.content
-
-        # Add the response as AIMessage (proper LangChain format)
-        new_messages = chat_history + [AIMessage(content=answer)]
-        state["messages"] = new_messages
-
-        print(f"Generated answer length: {len(answer)}")
-        print(f"Total messages in history: {len(new_messages)}")
-        print(f"Top 5 message types: {[type(msg).__name__ for msg in new_messages[:5]]}")
+        # Add context if available
+        if retrieved_docs or knowledge:
+            ctx = "\n".join(retrieved_docs) if retrieved_docs else ""
+            knowledge_str = json.dumps(knowledge, indent=2) if knowledge else ""
+            prompt_msgs.append(
+                SystemMessage(content=f"Context:\n{ctx}\n\nKnowledge:\n{knowledge_str}")
+            )
         
-        return state
+        # Add current query if it's not already in chat history
+        if current_query:
+            prompt_msgs.append(HumanMessage(content=current_query))
+        
+        print(f"[DEBUG] Total prompt messages: {len(prompt_msgs)}")
+        print(f"[DEBUG] Message types: {[type(msg).__name__ for msg in prompt_msgs]}")
+        
+        # ✅ Invoke the model (returns an AIMessage directly)
+        ai_reply: AIMessage = llm.invoke(prompt_msgs)
+        
+        print(f"[DEBUG] Generated response length: {len(ai_reply.content)}")
+        print(f"[DEBUG] Response preview: {ai_reply.content[:100]}...")
+        
+        # ✅ Return only the new message; add_messages will append it
+        return {"messages": [ai_reply]}
 
     except Exception as e:
         print(f"Error in generate_answer: {e}")
-        # Ensure we still have a response as proper LangChain message
-        chat_history = state.get("messages", [])
+        # ✅ Return error as proper AIMessage
         error_response = AIMessage(content="I apologize, but I encountered an error processing your request.")
-        state["messages"] = chat_history + [error_response]
-        return state
+        return {"messages": [error_response]}
 
 def update_permanent_knowledge(state: AgentState) -> AgentState:
     """
@@ -189,17 +181,24 @@ def update_permanent_knowledge(state: AgentState) -> AgentState:
         if "permanent_knowledge" not in state or not isinstance(state["permanent_knowledge"], dict):
             state["permanent_knowledge"] = {}
 
-        # Extract the latest assistant message (now LangChain AIMessage)
+        # ✅ Extract the latest assistant message (should be the last one due to add_messages)
         messages = state.get("messages", [])
         if messages:
-            latest_message = messages[-1]
-            if isinstance(latest_message, AIMessage):
+            # Get the most recent AIMessage
+            latest_ai_message = None
+            for msg in reversed(messages):
+                if isinstance(msg, AIMessage):
+                    latest_ai_message = msg
+                    break
+            
+            if latest_ai_message:
+                print(f"[DEBUG] Found latest AI message: {latest_ai_message.content[:100]}...")
                 
                 # 🧠 Use LLM to create concise knowledge summary
                 summary_prompt = f"""
                 Summarize this character analysis into 2-3 concise key insights about the character's psychology:
                 
-                Analysis: {latest_message.content}
+                Analysis: {latest_ai_message.content}
                 
                 Format as bullet points focusing on:
                 - Core psychological traits
@@ -210,18 +209,15 @@ def update_permanent_knowledge(state: AgentState) -> AgentState:
                 """
                 
                 try:
-                    response = openai_client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[
-                            {"role": "system", "content": "You are a literary analyst. Create concise character insights."},
-                            {"role": "user", "content": summary_prompt}
-                        ],
-                        temperature=0.3
-                    )
+                    # ✅ Use the LangChain wrapper for consistency
+                    summary_response = llm.invoke([
+                        SystemMessage(content="You are a literary analyst. Create concise character insights."),
+                        HumanMessage(content=summary_prompt)
+                    ])
                     
                     # Use timestamp as key, summarized insight as value
                     key = datetime.now().isoformat()
-                    value = response.choices[0].message.content.strip()
+                    value = summary_response.content.strip()
                     state["permanent_knowledge"][key] = value
                     print(f"[DEBUG] Added summarized knowledge with key: {key}")
                     print(f"[DEBUG] Summary: {value[:100]}...")
@@ -230,7 +226,7 @@ def update_permanent_knowledge(state: AgentState) -> AgentState:
                     print(f"[WARN] LLM summarization failed: {e}, storing original")
                     # Fallback: store original if LLM fails
                     key = datetime.now().isoformat()
-                    value = latest_message.content
+                    value = latest_ai_message.content
                     state["permanent_knowledge"][key] = value
 
         # Save updated knowledge
