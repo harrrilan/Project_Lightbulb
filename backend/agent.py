@@ -4,7 +4,7 @@ from typing import TypedDict, Literal
 from langgraph.graph import StateGraph, END
 from backend.utils.node import (
     check_permanent_knowledge,   # → sets state["need_retrieval"]
-    retrieve_from_chroma,        # → queries Chroma DB into state["retrieved_docs"]
+    retrieve_from_supabase,        # → queries Chroma DB into state["retrieved_docs"]
     generate_answer,             # → calls LLM with context & writes to state["messages"]
     update_permanent_knowledge,  # → summarizes / writes back to JSON file
 )
@@ -27,8 +27,8 @@ workflow = StateGraph(
 # 3.1 Check if existing JSON "permanent_knowledge" is enough
 workflow.add_node("check_knowledge", check_permanent_knowledge)
 
-# 3.2 If not enough, pull extra context from Chroma vector DB
-workflow.add_node("retrieve_docs", retrieve_from_chroma)
+# 3.2 If not enough, pull extra context from supabase vector DB
+workflow.add_node("retrieve_docs", retrieve_from_supabase)
 
 # 3.3 Build the final answer with LLM + (permanent_knowledge + retrieved_docs)
 workflow.add_node("compose_answer", generate_answer)
@@ -66,7 +66,7 @@ checkpointer = InMemorySaver()  # or DatabaseSaver for persistence
 graph = workflow.compile(checkpointer=checkpointer)
 # Now `graph.invoke(...)` will:
 #   1. check permanent JSON
-#   2. maybe retrieve from Chroma
+#   2. maybe retrieve from supabase
 #   3. call your LLM
 #   4. update the JSON file
 

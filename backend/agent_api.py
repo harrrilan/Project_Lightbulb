@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from .agent import graph, GraphConfig
-from .utils.state import AgentState
+from backend.utils.state import AgentState
 from langchain_core.messages import HumanMessage
 from fastapi.middleware.cors import CORSMiddleware
 

@@ -3,7 +3,6 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 from typing import Dict, List, Any
-import chromadb
 from langchain_core.messages import (
     HumanMessage, 
     AIMessage, 
@@ -16,6 +15,9 @@ from pathlib import Path
 from .state import AgentState  # Import AgentState from adjacent state.py
 import openai
 from datetime import datetime
+from supabase import create_client
+from langchain_community.vectorstores import SupabaseVectorStore
+from langchain_openai import OpenAIEmbeddings
 
 # ✅ Initialize the LLM wrapper (handles role conversion & batching)
 llm = ChatOpenAI(
@@ -71,7 +73,6 @@ def check_permanent_knowledge(state: AgentState) -> AgentState:
         state["need_retrieval"] = True
         return state
 
-def retrieve_from_chroma(state: AgentState) -> AgentState:
     """
     Query Chroma vector database for relevant documents based on the current query.
     """
@@ -104,6 +105,62 @@ def retrieve_from_chroma(state: AgentState) -> AgentState:
         
     except Exception as e:
         print(f"Error in retrieve_from_chroma: {e}")
+        state["retrieved_docs"] = []
+        return state
+
+def retrieve_from_supabase(state: AgentState) -> AgentState:
+    """
+    Query Supabase pgvector database for relevant documents based on the current query.
+    Direct replacement for retrieve_from_chroma using working test setup.
+    """
+    print("\n=== Executing: retrieve_from_supabase ===")
+    
+    try:
+        # 🔥 Use EXACT same setup as test_retrieve.py
+        SUPABASE_URL = os.getenv("SUPABASE_URL")
+        SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+        
+        # Create Supabase client (same as test)
+        supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        
+        current_query = state.get("current_query", "")
+        
+        # 🔥 Generate embeddings (same as test_retrieve.py)
+        response = openai_client.embeddings.create(
+            input=current_query,
+            model="text-embedding-3-large"
+        )
+        query_embedding = response.data[0].embedding
+        
+        # 🔥 Initialize SupabaseVectorStore (exact same as test)
+        embeddings = OpenAIEmbeddings(
+            model="text-embedding-3-large",
+            openai_api_key=os.getenv("OPENAI_API_KEY")
+        )
+        
+        vector_store = SupabaseVectorStore(
+            client=supabase,
+            embedding=embeddings,
+            table_name="embeddings_table",
+            query_name="match_documents"
+        )
+        
+        # 🎯 Query with k=5 (same as Chroma n_results=5)
+        results = vector_store.similarity_search(current_query, k=5)
+        print(f"[DEBUG] Raw Supabase results: Found {len(results)} documents")
+        
+        # 📄 Extract content same format as Chroma
+        # Chroma returned: res["documents"][0] (list of strings)
+        # Supabase returns: list of Documents with .page_content
+        state["retrieved_docs"] = [doc.page_content for doc in results]
+        
+        print(f"Query: {current_query}")
+        print(f"Top 5 retrieved docs: {state['retrieved_docs'][:5]}")
+        
+        return state
+        
+    except Exception as e:
+        print(f"Error in retrieve_from_supabase: {e}")
         state["retrieved_docs"] = []
         return state
 
